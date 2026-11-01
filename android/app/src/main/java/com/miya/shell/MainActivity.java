@@ -30,7 +30,6 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
-import androidx.core.view.WindowInsetsAnimationCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.webkit.WebViewAssetLoader;
@@ -39,7 +38,6 @@ import org.json.JSONObject;
 
 import java.io.InputStream;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -160,46 +158,17 @@ public class MainActivity extends AppCompatActivity {
     /* ---------------- 键盘 ---------------- */
 
     /**
-     * API 30+ 用 WindowInsetsAnimationCompat 跟随系统键盘动画逐帧压缩 WebView，
-     * 而不是等动画结束再一次性跳变（后者就是"键盘弹出时画面一顿"的来源）。
-     * 旧的 insets 监听保留：动画开始/结束的最终值仍以它为准。
+     * 键盘：只在"最终高度确定"时改一次 WebView 高度，**不逐帧跟随键盘动画**。
+     * 逐帧 setLayoutParams 会让这个网页（几百个 fixed 层 + 依赖 --app-height 的桌面底栏）
+     * 每帧全页重排，低端机上就是"卡死 + 桌面文字/底栏乱跳 + 闪"。
+     * 一次到位只有一次布局变化，和系统 adjustResize 的观感一致。
      */
     private void setupImeHandling() {
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
-            int ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
-            applyImeLayout(ime);
+            applyImeLayout(insets.getInsets(WindowInsetsCompat.Type.ime()).bottom);
             scheduleKeyboardNotify();
             return insets;
         });
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            ViewCompat.setWindowInsetsAnimationCallback(root,
-                    new WindowInsetsAnimationCompat.Callback(
-                            WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
-                        @Override
-                        public WindowInsetsCompat onProgress(WindowInsetsCompat insets,
-                                                             List<WindowInsetsAnimationCompat> running) {
-                            for (int i = 0; i < running.size(); i++) {
-                                if ((running.get(i).getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) {
-                                    applyImeLayout(insets.getInsets(WindowInsetsCompat.Type.ime()).bottom);
-                                    break;
-                                }
-                            }
-                            return insets;
-                        }
-
-                        @Override
-                        public void onEnd(WindowInsetsAnimationCompat animation) {
-                            if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) == 0) return;
-                            // 按最终 insets 收口，避免最后一帧没对齐、键盘上方露一条缝
-                            WindowInsetsCompat rootInsets = ViewCompat.getRootWindowInsets(root);
-                            if (rootInsets != null) {
-                                applyImeLayout(rootInsets.getInsets(WindowInsetsCompat.Type.ime()).bottom);
-                            }
-                            scheduleKeyboardNotify();
-                        }
-                    });
-        }
     }
 
     /** 只改布局，不回调网页：动画期间每帧都会走这里，回调网页会排队卡顿。 */

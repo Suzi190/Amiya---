@@ -184,10 +184,12 @@
       var vvTop = vv ? (vv.offsetTop || 0) : 0;
       /* 键盘压缩过程中这三个值并不同步（visualViewport 常晚一帧），
        * 取 max 会让 --app-height 在两个值之间来回摆 —— 手机上就是输入框上下小幅跳动。
-       * Android WebView 里 innerHeight 就是真实可视高度，直接用它。 */
-      finalH = innerH > 0 ? innerH : Math.max(clientH, vvH + vvTop);
+       * Android WebView 里 innerHeight 就是真实可视高度，直接用它；
+       * 只有拿到异常小值（过渡帧里 innerHeight 可能瞬间为 0）才退回三者取大。 */
+      finalH = innerH >= 100 ? innerH : Math.max(clientH, vvH + vvTop);
       var rH = finalH;
-      if (isMobile && lastAppHeight > 0 && Math.abs(rH - lastAppHeight) < 2) return;
+      /* 容差对桌面端也生效：1px 级别的抖动不值得触发整页重排（底栏会跟着跳/闪） */
+      if (lastAppHeight > 0 && Math.abs(rH - lastAppHeight) < 2) return;
       lastAppHeight = rH;
       document.documentElement.style.setProperty('--app-height', rH + 'px');
     }

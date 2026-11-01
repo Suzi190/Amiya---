@@ -107,18 +107,24 @@ gradle :app:assembleDebug
      强制重排；现在只扫 `[id$="-app"]` / `[id$="-overlay"]` / `[data-miya-app]`，且先用 class 判断是否打开。
   3. `miyaSlidePanel.close()` 会把元素 `hidden=true`，而各 App 的 `open()` 只加类、不会取消 `hidden`
      —— 设置 App 被它关一次就再也打不开了。现在抽屉关闭明确排除 App 容器和桌面/玩法层。
+  4. **v1.0.5 的真正根因**：同一个 `hidden` 残留还会骗过"是否打开"的判断 —— 各 App 的 CSS 是
+     `.xxx-app.is-open{display:flex !important}`，`!important` 压过浏览器默认的 `[hidden]{display:none}`，
+     所以屏幕上明明开着的设置 App，DOM 上却同时带着 `hidden`。旧判断一看 `hidden` 就认为"没打开"，
+     于是返回找不到任何层，一路落到 `moveTaskToBack()` —— 用户看到的就是"侧滑直接退出 APK"。
+     现在（1）`openSettingsApp()` 打开前先 `removeAttribute('hidden')`，
+     （2）判断打开只看 `is-open` / `is-active` / `aria-hidden="false"` 加实际 `display` 样式，
+     （3）`forceBackToDesk()` 改成纯选择器兜底（`[id$="-app"].is-open` 这类），不做任何测量。
   关闭顺序改为「`back()` → `close()`/`closeApp()`/… → App 自己的返回按钮 → 硬收层」，
   设置新增 `miyaSettingsApp.back()`（还开着二级页面就先回列表页，否则关闭整个设置），
   最后兜底 `forceBackToDesk()` 不再依赖 `body.miya-app-open`，只要有打开着的层就一定收掉，绝不退后台。
-- **键盘弹出 / 收起时画面顿一下、输入框小幅上下跳**：v1.0.3 起用 `WindowInsetsAnimationCompat`
-  逐帧跟随系统键盘动画压缩 WebView，键盘高度稳定 110 ms 后才通知网页。v1.0.4 再修三处抖动源：
-  1. `index.html` 的 `--app-height` 原本取 `Math.max(innerHeight, clientHeight, vv.height + vv.offsetTop)`，
-     键盘压缩过程中三者并不同步（visualViewport 常晚一帧），页面高度就在两个值之间来回摆；
-     安卓壳里直接用 `innerHeight`。
-  2. 聊天室 `syncKeyboardInset()` 原来每帧都会切类、`scrollRoomToBottom()` 滚到底，
-     现在按 inset 值去重，滚动改成 150 ms 防抖，只在键盘高度稳定后对齐一次。
-  3. 原生侧的 `revealFocusedInput()` 原来无条件 `scrollIntoView`，即使输入框已在视野内也会再滚一次；
-     现在只在焦点框真的被挤出可视区时才滚。
+- **键盘弹出 / 收起时画面卡、桌面文字和底栏乱跳、还在闪**：v1.0.5 起取消"逐帧跟随键盘动画"。
+  之前用 `WindowInsetsAnimationCompat` 每帧改 WebView 底部边距，WebView 每帧 resize
+  → `--app-height` 每帧变 → 几百个 `position:fixed` 层每帧全页重排，低端机上直接卡死，
+  桌面底栏/文字跟着高度反复缩放就是"乱跳 + 闪"。现在只在 insets 最终值确定时改一次
+  （和系统 `adjustResize` 的观感一致），重排次数从 ~60 降到 1。
+  细化抖动源也一并修掉：`--app-height` 直接用 `innerHeight`（异常小值才退回三者取大）、
+  2px 以内变化不触发重排；聊天室 `syncKeyboardInset()` 按 inset 去重、滚动改 150 ms 防抖；
+  原生 `revealFocusedInput()` 只在焦点框真的被挤出可视区时才滚。
 - **页面空白**：先确认 `mingruis-miya-main/index.html` 存在；CI 里由 *Stage web assets* 步骤复制。
 - **侧滑返回时整屏一片“磨砂玻璃”**：网页原本会在 `body.miya-app-open` 时给桌面 `.phone`
   加 `filter: blur(10px)`（App 打开时当作虚化背景）。APK 里 App 层是全屏不透明的，这层虚化本来

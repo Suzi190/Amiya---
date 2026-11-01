@@ -269,10 +269,21 @@
     return true;
   }
 
-  function coversScreen(el) {
-    var r = rectOf(el);
-    if (!r) return false;
-    return r.width >= global.innerWidth * 0.6 && r.height >= global.innerHeight * 0.6;
+  /* 轻量可见性判断：只看样式，不做布局测量。
+   * 旧写法 coversScreen()+isVisible() 有两个坑，各踩过一次：
+   *   1. 非活跃玩法层被 content-visibility:hidden 跳过绘制，但 getBoundingClientRect 依旧是全屏，
+   *      于是被当成"打开着的 App"，返回时去点它内部的按钮，真正的 App 层反而关不掉；
+   *   2. 小手机层里的 App 带缩放，宽度不到 0.6 屏时被判成"没打开"，返回就直接落到退后台。
+   * App 关着时的稳定特征就是 display:none（各 App 的 CSS 都这么写），用它判断既准又零重排。
+   */
+  function shownByStyle(el) {
+    if (!el || !el.isConnected) return false;
+    var s = styleOf(el);
+    if (!s) return false;
+    if (s.display === 'none' || s.visibility === 'hidden' || s.visibility === 'collapse') return false;
+    if (s.contentVisibility === 'hidden') return false;
+    if (parseFloat(s.opacity || '1') < 0.05) return false;
+    return true;
   }
 
   function closeDialog() {
@@ -369,9 +380,11 @@
 
   function clickBackButton(root) {
     if (!root || !root.querySelectorAll) return false;
-    // 精确到"以 -back / -close 结尾"或"-back-" 段：避免命中 miya-st-backup-* 这类同前缀元素
+    // 精确到"以 -back / -close 结尾"或"-back-" 段：避免命中 miya-st-backup-* 这类同前缀元素。
+    // class 名也一起匹配：设置页的返回键是 .st-navback，只有类名没有 id。
     var btns = root.querySelectorAll(
       '[data-miya-back], [data-miya-close], [id$="-back"], [id*="-back-"], [id$="-close"], ' +
+      '[class*="navback"], [class*="nav-back"], [class*="back-btn"], [class*="backbtn"], ' +
       '[aria-label="返回"], [aria-label="关闭"]'
     );
     for (var i = 0; i < btns.length; i++) {
@@ -388,13 +401,22 @@
    */
   var APP_LAYER_SELECTOR = '[id$="-app"], [id$="-overlay"], [data-miya-app]';
 
+  /* 打开标记只看类 / aria-hidden，**不看 el.hidden**。
+   * 历史坑：miyaSlidePanel.close() 会给元素写 hidden=true，而各 App 的 CSS 用
+   * `.xxx-app.is-open{display:flex !important}` 打开 —— !important 压过 UA 的
+   * [hidden]{display:none}，所以"hidden + is-open"的元素在屏幕上明明是开着的，
+   * 但这里一看 hidden 就判成没打开，返回逻辑于是找不到它、一路落到退后台（看起来就是退出 APK）。
+   */
   function markedOpen(el) {
-    if (el.hidden) return false;
+    if (!el.isConnected) return false;
     if (el.classList.contains('is-open') || el.classList.contains('is-active')) return true;
     return el.getAttribute('aria-hidden') === 'false';
   }
 
-  /* 当前真正打开着的 App 层（玩法模式层不算，它们由 closeModeLayer 处理）。 */
+  /* 当前真正打开着的 App 层（玩法模式层不算，它们由 closeModeLayer 处理）。
+   * 按 z-index 升序返回，closeTopLayer 从尾部取，保证先关最上层那个
+   * （设置是 z-index 520，比聊天 App 高，侧滑时应该先收设置而不是把聊天 App 关掉）。
+   */
   function appLayersOpen() {
     var out = [];
     var nodes = doc.querySelectorAll(APP_LAYER_SELECTOR);
@@ -404,9 +426,11 @@
       // 玩法层交给 closeModeLayer 走模式切换，别当成普通 App 关掉
       if (el.id === 'miya-simulator-app' || el.id === 'miya-world-app') continue;
       if (!markedOpen(el)) continue; // 便宜判断在前，避免无谓的布局测量
-      if (!coversScreen(el) || !isVisible(el)) continue;
-      out.push(el);
+      if (!shownByStyle(el)) continue;
+      var s = styleOf(el);
+      out.push({ el: el, z: s ? (parseInt(s.zIndex, 10) || 0) : 0 });
     }
+    out.sort(function (a, b) { return a.z - b.z; });
     return out;
   }
 
@@ -423,7 +447,7 @@
   function closeTopLayer() {
     var layers = appLayersOpen();
     for (var i = layers.length - 1; i >= 0; i--) {
-      var el = layers[i];
+      var el = layers[i].el;
       // back()/close() 最可靠；退不到就点 App 自己的返回按钮；再不行硬收层
       if (callCloseApi(el)) return true;
       if (clickBackButton(el)) return true;
@@ -493,16 +517,33 @@
     return true;
   }
 
-  /* 兜底：真正在 App 里、但所有关闭手段都没生效时，把打开着的层全部收回桌面。
-   * 不能再依赖 body.miya-app-open（某些 App 关闭时会误删这个类，设置还开着就没了），
-   * 否则返回会一路落到 moveTaskToBack —— 在手机上看起来就是"App 被关掉了"。
+  /* 保底回桌面：不看可见性、不做测量，只看"DOM 里还有没有看起来开着的 App 层"。
+   * 返回 false 会一路落到原生 moveTaskToBack（用户看到的就是"整个 APK 退出了"），
+   * 所以在 App 界面里侧滑必须走到 true —— 这条兜底宁可多收一层，也绝不误退。
    */
   function forceBackToDesk() {
-    var layers = appLayersOpen();
-    if (!layers.length) return false;
-    for (var i = 0; i < layers.length; i++) hardCloseLayer(layers[i]);
-    doc.body.classList.remove('miya-app-open');
-    return true;
+    var nodes = doc.querySelectorAll(
+      '[id$="-app"].is-open, [id$="-overlay"].is-open, ' +
+      '[id$="-app"][aria-hidden="false"], [id$="-overlay"][aria-hidden="false"], ' +
+      '[data-miya-app].is-open'
+    );
+    var closed = 0;
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (el.classList.contains('miya-mode-layer')) continue;
+      if (el.id === 'miya-simulator-app' || el.id === 'miya-world-app') continue;
+      safe(function () { hardCloseLayer(el); });
+      closed += 1;
+    }
+    if (closed) {
+      doc.body.classList.remove('miya-app-open');
+      return true;
+    }
+    if (doc.body.classList.contains('miya-app-open')) {
+      doc.body.classList.remove('miya-app-open');
+      return true;
+    }
+    return false;
   }
 
   function backDone(step) {

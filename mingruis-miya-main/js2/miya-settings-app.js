@@ -3365,6 +3365,11 @@
     var app = $('miya-settings-app');
     if (!app) return;
     panelClosing = false;
+    /* 清掉历史版本 miyaSlidePanel.close() 留下的 hidden：
+     * CSS 的 display:flex !important 会让它照常显示，但 hidden 属性会让
+     * 返回逻辑误判成"没打开"，侧滑就直接退出 APK。 */
+    if (app.hasAttribute('hidden')) app.removeAttribute('hidden');
+    app.removeAttribute('inert');
     app.classList.remove('is-panel-returning');
     app.classList.add('is-open');
     app.setAttribute('aria-hidden', 'false');
