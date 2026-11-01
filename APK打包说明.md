@@ -89,6 +89,8 @@ gradle :app:assembleDebug
   因此每次重新构建都能**直接覆盖安装**，数据保留。
 - 如果你安装过最早那一版（当时 CI 用随机签名），需要先卸载一次再装新版；之后所有版本都能直接覆盖升级。
 - 覆盖安装时若提示"版本号未变化"或失败，可把 `android/app/build.gradle` 的 `versionCode` 加 1 再构建。
+- 覆盖安装后的第一次启动会自动清一次网页缓存（Service Worker Cache Storage）并刷新一次页面，
+  保证打进新 APK 的网页资源立即生效；`localStorage` / `IndexedDB` / OPFS 里的记录不受影响。
 
 ## 六、常见问题
 
