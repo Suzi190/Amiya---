@@ -10,3 +10,7 @@ android/app/src/main/assets/public/
 .vscode/
 *.iml
 .DS_Store
+
+# 本地 CI 轮询临时文件
+ci-status.json
+ci-poll-error.txt
