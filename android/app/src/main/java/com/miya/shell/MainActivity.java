@@ -2,6 +2,7 @@ package com.miya.shell;
 
 import android.annotation.SuppressLint;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -55,11 +56,27 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String START_URL = "https://localhost/index.html";
 
+    /** 覆盖安装后清一次 Service Worker 缓存的标记（按 versionCode，见 clearStaleWebCacheOnce） */
+    private static final String KEY_CACHE_VERSION = "cache_cleared_version";
+    private static final String CLEAR_CACHE_JS =
+            "(function(){try{"
+          + "if(!(window.caches&&caches.keys))return;"
+          + "caches.keys().then(function(ks){"
+          + "if(!ks.length)return;"
+          + "Promise.all(ks.map(function(k){return caches.delete(k);})).then(function(){"
+          + "var done=false;function reload(){if(done)return;done=true;location.reload();}"
+          + "var sw=navigator.serviceWorker;"
+          + "if(sw&&sw.getRegistrations){sw.getRegistrations().then(function(rs){"
+          + "rs.forEach(function(r){try{r.unregister();}catch(e){}});reload();});}else{reload();}"
+          + "});});"
+          + "}catch(e){}})();";
+
     private FrameLayout root;
     private WebView webView;
     private MiyaBridge bridge;
     private ValueCallback<Uri[]> pendingFileCallback;
     private int imeBottomPx = 0;
+    private boolean cacheCheckDone = false;
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -162,6 +179,28 @@ public class MainActivity extends AppCompatActivity {
 
     /* ---------------- WebView ---------------- */
 
+    /**
+     * 覆盖安装后 Service Worker 的 Cache Storage 里还留着上一版网页资源，
+     * 新打进 APK 的 JS/CSS 就不会生效（改了代码却看不到效果）。每个 versionCode 只清一次：
+     * 删掉 Cache Storage、注销 Service Worker，然后刷新一次页面。
+     * 只动缓存，localStorage / IndexedDB / OPFS 里的聊天记录都不受影响。
+     */
+    @SuppressWarnings("deprecation")
+    private void clearStaleWebCacheOnce() {
+        if (cacheCheckDone) return;
+        cacheCheckDone = true;
+        int version;
+        try {
+            version = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+        } catch (PackageManager.NameNotFoundException e) {
+            return;
+        }
+        SharedPreferences sp = getSharedPreferences("miya_shell", MODE_PRIVATE);
+        if (sp.getInt(KEY_CACHE_VERSION, 0) >= version) return;
+        sp.edit().putInt(KEY_CACHE_VERSION, version).apply();
+        webView.evaluateJavascript(CLEAR_CACHE_JS, value -> { });
+    }
+
     private void configureWebView() {
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
@@ -204,6 +243,12 @@ public class MainActivity extends AppCompatActivity {
                 .build();
 
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                clearStaleWebCacheOnce();
+            }
+
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 Uri url = request.getUrl();

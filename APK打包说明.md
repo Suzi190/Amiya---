@@ -96,6 +96,10 @@ gradle :app:assembleDebug
 - **导出的文件找不到**：文件管理器 → 下载 → `Miya`；Android 10+ 也可在「文件 → 下载」看到。
 - **返回直接退出**：当前已在桌面层时按返回会「退到后台」（符合不退出预期）；若希望彻底退出，用系统任务列表划掉。
 - **页面空白**：先确认 `mingruis-miya-main/index.html` 存在；CI 里由 *Stage web assets* 步骤复制。
+- **侧滑返回时整屏一片“磨砂玻璃”**：网页原本会在 `body.miya-app-open` 时给桌面 `.phone`
+  加 `filter: blur(10px)`（App 打开时当作虚化背景）。APK 里 App 层是全屏不透明的，这层虚化本来
+  看不见，但返回瞬间（App 层 0.38 s 淡出）会露出来。`js2/miya-native-shell.js` 已注入
+  `html.miya-native-shell body.miya-app-open .phone{transform:none;filter:none}` 关掉它，v1.0.2 起生效。
 - **想改应用名/包名**：改 `android/app/build.gradle` 的 `applicationId`、`res/values/strings.xml` 的 `app_name`
   （改 `applicationId` 会被视为新应用，数据不继承）。
 - **想换成正式签名**：在 CI 中注入 keystore 并配置 `signingConfigs`，把 `assembleDebug` 换成 `assembleRelease`。
