@@ -197,6 +197,9 @@ public class MainActivity extends AppCompatActivity {
         }
 
         final WebViewAssetLoader assetLoader = new WebViewAssetLoader.Builder()
+                // 默认域名是 appassets.androidplatform.net，页面用的是 https://localhost，
+                // 必须显式设置，否则所有请求都拦截不到（表现为白屏）。
+                .setDomain("localhost")
                 .addPathHandler("/", this::openAsset)
                 .build();
 
