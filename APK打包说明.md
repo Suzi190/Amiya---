@@ -5,14 +5,21 @@
 
 ## 一、怎么拿到 APK（推荐）
 
-1. 把本仓库推到 GitHub（分支 `main`）。
-2. 打开仓库 **Actions** → 左侧 **Build Miya APK** → 右侧 **Run workflow**（或直接 push 代码自动触发）。
-3. 等 3~6 分钟，进入这次运行页面，底部 **Artifacts** → 下载 `miya-apk.zip`。
-4. 解压得到 `miya-xxxxxxx.apk`，传到手机点击安装（需允许「安装未知来源应用」）。
+构建完成后，APK 会自动发布到 **Releases**，两种下载方式任选：
 
-> 触发条件：改动 `android/**`、`mingruis-miya-main/**` 或 workflow 文件时自动构建；也可手动 `Run workflow`。
+1. **手机/电脑直接下载（最省事）**
+   打开 <https://github.com/Suzi190/Amiya---/releases/tag/apk-latest>
+   → 点 `miya.apk` 下载 → 传到手机安装（允许「安装未知来源应用」）。
 
-首次安装需在手机上允许「安装未知应用」；APK 使用 debug 签名，后续覆盖安装同包名可直接升级、**数据保留**。
+2. **从 Actions 产物下载**
+   仓库 **Actions** → 最新的 **Build Miya APK** 运行 → 页面底部 **Artifacts** → `miya-apk.zip` → 解压得到 APK。
+
+构建触发方式：改动 `android/**`、`mingruis-miya-main/**` 或 workflow 文件时自动构建；
+也可以在 **Actions → Build Miya APK → Run workflow** 手动触发。
+
+> 每次构建都会覆盖 Releases 里的 `apk-latest`（同一个包名、同一个 debug 签名），
+> 手机上直接覆盖安装即可，**已有数据不会丢**。
+
 
 ## 二、这套壳做了什么
 
