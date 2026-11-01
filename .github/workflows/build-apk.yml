@@ -34,53 +34,61 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Inspect Android SDK
+      - name: Configure Android SDK
         run: |
-          echo "ANDROID_HOME=${ANDROID_HOME:-<empty>}"
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-<empty>}"
+          set -e
           SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          echo "SDK=$SDK"
-          export ANDROID_HOME="$SDK"
-          export ANDROID_SDK_ROOT="$SDK"
-          ls "$SDK/platforms" 2>/dev/null || true
-          ls "$SDK/build-tools" 2>/dev/null || true
-          ls "$SDK/cmdline-tools" 2>/dev/null || true
+          if [ ! -d "$SDK" ]; then
+            echo "Android SDK directory not found at $SDK" >&2
+            exit 1
+          fi
+          echo "Using Android SDK: $SDK"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK" > android/local.properties
+          ls "$SDK/platforms" || true
+          ls "$SDK/build-tools" || true
 
-      - name: Ensure SDK platform 34
+      - name: Install platform 34 if missing
         run: |
-          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          export ANDROID_HOME="$SDK"
-          export ANDROID_SDK_ROOT="$SDK"
-          SDKMGR="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          set -e
+          SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMGR" ]; then
             SDKMGR="$(command -v sdkmanager || true)"
           fi
-          if [ -x "$SDKMGR" ]; then
+          if [ -n "$SDKMGR" ] && [ -x "$SDKMGR" ] && [ ! -d "$ANDROID_HOME/platforms/android-34" ]; then
             yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
             "$SDKMGR" --install "platforms;android-34" "build-tools;34.0.0" || true
-          else
-            echo "sdkmanager not found, relying on preinstalled SDK"
           fi
-          ls "$SDK/platforms" || true
+          ls "$ANDROID_HOME/platforms" || true
 
       - name: Stage web assets
         run: |
+          set -e
           rm -rf android/app/src/main/assets/public
           mkdir -p android/app/src/main/assets/public
           cp -R mingruis-miya-main/. android/app/src/main/assets/public/
           rm -rf android/app/src/main/assets/public/.git
+          ls android/app/src/main/assets/public | head -20
 
-      - name: Set up Gradle 8.7
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
+      - name: Generate Gradle wrapper
+        working-directory: android
+        run: gradle wrapper --gradle-version 8.7 --distribution-type bin --console=plain
+
       - name: Build debug APK
         working-directory: android
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace --console=plain 2>&1 | tee gradle-build.log
 
       - name: Collect APK
         run: |
+          set -e
           mkdir -p out
           cp android/app/build/outputs/apk/debug/app-debug.apk "out/miya-${GITHUB_SHA::7}.apk"
           ls -lh out
@@ -92,3 +100,14 @@ jobs:
           path: out/*.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Annotate build failure
+        if: failure()
+        run: |
+          if [ -f android/gradle-build.log ]; then
+            tail -n 20 android/gradle-build.log | tr -d '\r' | cut -c1-800 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+          else
+            echo "::error::gradle-build.log was not produced"
+          fi
