@@ -1,0 +1,156 @@
+﻿{
+    "id":  124763301321,
+    "run_id":  41277761006,
+    "workflow_name":  "Build Miya APK",
+    "head_branch":  "main",
+    "run_url":  "https://api.github.com/repos/Suzi190/Amiya---/actions/runs/41277761006",
+    "run_attempt":  1,
+    "node_id":  "CR_kwDOVeutcs8AAAAdDHjlyQ",
+    "head_sha":  "6f9bcb3c19186ffea1c927461b70d7e062dccbc8",
+    "url":  "https://api.github.com/repos/Suzi190/Amiya---/actions/jobs/124763301321",
+    "html_url":  "https://github.com/Suzi190/Amiya---/actions/runs/41277761006/job/124763301321",
+    "status":  "completed",
+    "conclusion":  "failure",
+    "created_at":  "2026-11-01T05:39:12Z",
+    "started_at":  "2026-11-01T05:39:15Z",
+    "completed_at":  "2026-11-01T05:39:55Z",
+    "name":  "build",
+    "steps":  [
+                  {
+                      "name":  "Set up job",
+                      "status":  "completed",
+                      "conclusion":  "success",
+                      "number":  1,
+                      "started_at":  "2026-11-01T05:39:15Z",
+                      "completed_at":  "2026-11-01T05:39:17Z"
+                  },
+                  {
+                      "name":  "Checkout",
+                      "status":  "completed",
+                      "conclusion":  "success",
+                      "number":  2,
+                      "started_at":  "2026-11-01T05:39:17Z",
+                      "completed_at":  "2026-11-01T05:39:18Z"
+                  },
+                  {
+                      "name":  "Set up JDK 17",
+                      "status":  "completed",
+                      "conclusion":  "success",
+                      "number":  3,
+                      "started_at":  "2026-11-01T05:39:18Z",
+                      "completed_at":  "2026-11-01T05:39:18Z"
+                  },
+                  {
+                      "name":  "Configure Android SDK",
+                      "status":  "completed",
+                      "conclusion":  "success",
+                      "number":  4,
+                      "started_at":  "2026-11-01T05:39:18Z",
+                      "completed_at":  "2026-11-01T05:39:18Z"
+                  },
+                  {
+                      "name":  "Install platform 34 if missing",
+                      "status":  "completed",
+                      "conclusion":  "success",
+                      "number":  5,
+                      "started_at":  "2026-11-01T05:39:18Z",
+                      "completed_at":  "2026-11-01T05:39:18Z"
+                  },
+                  {
+                      "name":  "Stage web assets",
+                      "status":  "completed",
+                      "conclusion":  "success",
+                      "number":  6,
+                      "started_at":  "2026-11-01T05:39:18Z",
+                      "completed_at":  "2026-11-01T05:39:18Z"
+                  },
+                  {
+                      "name":  "Set up Gradle",
+                      "status":  "completed",
+                      "conclusion":  "success",
+                      "number":  7,
+                      "started_at":  "2026-11-01T05:39:18Z",
+                      "completed_at":  "2026-11-01T05:39:25Z"
+                  },
+                  {
+                      "name":  "Generate Gradle wrapper",
+                      "status":  "completed",
+                      "conclusion":  "success",
+                      "number":  8,
+                      "started_at":  "2026-11-01T05:39:25Z",
+                      "completed_at":  "2026-11-01T05:39:34Z"
+                  },
+                  {
+                      "name":  "Build debug APK",
+                      "status":  "completed",
+                      "conclusion":  "failure",
+                      "number":  9,
+                      "started_at":  "2026-11-01T05:39:34Z",
+                      "completed_at":  "2026-11-01T05:39:47Z"
+                  },
+                  {
+                      "name":  "Collect APK",
+                      "status":  "completed",
+                      "conclusion":  "skipped",
+                      "number":  10,
+                      "started_at":  "2026-11-01T05:39:47Z",
+                      "completed_at":  "2026-11-01T05:39:47Z"
+                  },
+                  {
+                      "name":  "Upload APK",
+                      "status":  "completed",
+                      "conclusion":  "skipped",
+                      "number":  11,
+                      "started_at":  "2026-11-01T05:39:47Z",
+                      "completed_at":  "2026-11-01T05:39:47Z"
+                  },
+                  {
+                      "name":  "Annotate build failure",
+                      "status":  "completed",
+                      "conclusion":  "success",
+                      "number":  12,
+                      "started_at":  "2026-11-01T05:39:47Z",
+                      "completed_at":  "2026-11-01T05:39:47Z"
+                  },
+                  {
+                      "name":  "Post Set up Gradle",
+                      "status":  "completed",
+                      "conclusion":  "success",
+                      "number":  22,
+                      "started_at":  "2026-11-01T05:39:47Z",
+                      "completed_at":  "2026-11-01T05:39:52Z"
+                  },
+                  {
+                      "name":  "Post Set up JDK 17",
+                      "status":  "completed",
+                      "conclusion":  "success",
+                      "number":  23,
+                      "started_at":  "2026-11-01T05:39:52Z",
+                      "completed_at":  "2026-11-01T05:39:53Z"
+                  },
+                  {
+                      "name":  "Post Checkout",
+                      "status":  "completed",
+                      "conclusion":  "success",
+                      "number":  24,
+                      "started_at":  "2026-11-01T05:39:53Z",
+                      "completed_at":  "2026-11-01T05:39:53Z"
+                  },
+                  {
+                      "name":  "Complete job",
+                      "status":  "completed",
+                      "conclusion":  "success",
+                      "number":  25,
+                      "started_at":  "2026-11-01T05:39:53Z",
+                      "completed_at":  "2026-11-01T05:39:53Z"
+                  }
+              ],
+    "check_run_url":  "https://api.github.com/repos/Suzi190/Amiya---/check-runs/124763301321",
+    "labels":  [
+                   "ubuntu-latest"
+               ],
+    "runner_id":  1000000124,
+    "runner_name":  "GitHub Actions 1000000124",
+    "runner_group_id":  0,
+    "runner_group_name":  "GitHub Actions"
+}

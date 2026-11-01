@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- 基础主题：浅色、无 ActionBar、系统栏透明（全屏沉浸由 MainActivity 负责隐藏系统栏） -->
-    <style name="Theme.Miya.Base" parent="Theme.AppCompat.Light.NoActionBar">
+    <style name="Theme.MiyaBase" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:windowBackground">@color/miya_bg</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionModeOverlay">true</item>
@@ -12,5 +12,5 @@
         <item name="android:windowContentTransitions">true</item>
     </style>
 
-    <style name="Theme.Miya" parent="Theme.Miya.Base" />
+    <style name="Theme.Miya" parent="Theme.MiyaBase" />
 </resources>

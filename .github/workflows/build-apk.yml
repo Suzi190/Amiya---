@@ -104,9 +104,15 @@ jobs:
       - name: Annotate build failure
         if: failure()
         run: |
-          if [ -f android/gradle-build.log ]; then
-            tail -n 20 android/gradle-build.log | tr -d '\r' | cut -c1-800 | while IFS= read -r line; do
-              echo "::error::${line}"
+          LOG=android/gradle-build.log
+          if [ -f "$LOG" ]; then
+            ERR=$(awk 'BEGIN{f=0} /FAILURE:|What went wrong|^E:|error:/{f=1} f' "$LOG" \
+              | sed 's/\r$//' | grep -vE '^[[:space:]]+at ' | head -n 25)
+            if [ -z "$ERR" ]; then
+              ERR=$(tail -n 30 "$LOG" | sed 's/\r$//')
+            fi
+            printf '%s\n' "$ERR" | cut -c1-800 | while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error::${line}"
             done
           else
             echo "::error::gradle-build.log was not produced"
