@@ -83,7 +83,14 @@ gradle :app:assembleDebug
 若使用 Android Studio：直接 `File → Open` 选择 `android/` 目录即可，
 需先在 `android/local.properties` 写入 `sdk.dir=你的SDK路径`。
 
-## 五、常见问题
+## 五、首次安装 / 升级说明
+
+- 本仓库的 APK 使用**仓库内固定的调试签名**（`android/keystore/miya-debug.jks`，仅供自用，请勿用于上架分发），
+  因此每次重新构建都能**直接覆盖安装**，数据保留。
+- 如果你安装过最早那一版（当时 CI 用随机签名），需要先卸载一次再装新版；之后所有版本都能直接覆盖升级。
+- 覆盖安装时若提示"版本号未变化"或失败，可把 `android/app/build.gradle` 的 `versionCode` 加 1 再构建。
+
+## 六、常见问题
 
 - **通知收不到**：设置里打开「系统通知」，并确认系统「应用通知」已允许；省电模式/后台限制可能延迟定时提醒。
 - **导出的文件找不到**：文件管理器 → 下载 → `Miya`；Android 10+ 也可在「文件 → 下载」看到。
