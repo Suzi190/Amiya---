@@ -230,23 +230,54 @@
 
   /* ============================ 返回手势 ============================ */
 
+  function styleOf(el) {
+    return safe(function () { return global.getComputedStyle(el); }, null);
+  }
+
+  function rectOf(el) {
+    return safe(function () { return el.getBoundingClientRect(); }, null);
+  }
+
+  /* 判断"真的可见"。两个坑：
+   * 1. 非活跃玩法层（.miya-mode-layer:not(.is-active)）被 content-visibility:hidden 跳过绘制，
+   *    但 getBoundingClientRect 依旧是全屏尺寸 —— 只看尺寸会把它当成打开着的 App，
+   *    于是返回时去点它内部的按钮，真正的 App 层反而关不掉。
+   * 2. 抽屉 / 面板常驻 DOM，靠 opacity:0 隐藏，也必须排除。
+   */
   function isVisible(el) {
     if (!el || !el.isConnected || el.hidden) return false;
-    var s = global.getComputedStyle(el);
+    if (el.getAttribute && el.getAttribute('aria-hidden') === 'true' &&
+        !el.classList.contains('is-active')) return false;
+    if (el.closest && el.closest('.miya-mode-layer:not(.is-active):not(.is-leaving)')) return false;
+    var s = styleOf(el);
     if (!s) return false;
-    if (s.display === 'none' || s.visibility === 'hidden') return false;
-    if (s.pointerEvents === 'none') return false;
-    if (parseFloat(s.opacity || '1') === 0) return false;
-    var r = el.getBoundingClientRect();
+    if (s.display === 'none' || s.visibility === 'hidden' || s.visibility === 'collapse') return false;
+    if (s.contentVisibility === 'hidden') return false;
+    if (parseFloat(s.opacity || '1') < 0.05) return false;
+    var r = rectOf(el);
+    if (!r) return false;
     if (r.width < 24 || r.height < 24) return false;
     if (r.bottom <= 0 || r.top >= global.innerHeight) return false;
     if (r.right <= 0 || r.left >= global.innerWidth) return false;
     return true;
   }
 
+  function isClickable(el) {
+    if (!isVisible(el)) return false;
+    var s = styleOf(el);
+    if (!s || s.pointerEvents === 'none') return false;
+    return true;
+  }
+
+  function coversScreen(el) {
+    var r = rectOf(el);
+    if (!r) return false;
+    return r.width >= global.innerWidth * 0.6 && r.height >= global.innerHeight * 0.6;
+  }
+
   function closeDialog() {
     var rootEl = doc.querySelector('.miya-dialog-root');
-    if (!rootEl || rootEl.hidden) return false;
+    if (!rootEl || rootEl.hidden || !isVisible(rootEl)) return false;
     var closer = rootEl.querySelector('[data-miya-dialog-close]');
     if (!closer) return false;
     closer.click();
@@ -279,49 +310,152 @@
     return false;
   }
 
-  function findCloseApi(el) {
-    var id = el.id;
-    if (!id) return null;
+  /* id → 全局 API 名。个别 App 的导出名和 id 推导不一致，显式列出。 */
+  var APP_API_ALIAS = {
+    'miya-offline-app': 'miyaOfflineApp',
+    'miya-fun-sayguess-app': 'miyaFunSayGuessApp'
+  };
+
+  /* 依次尝试的关闭方法；backToHub / closeToHome 只回内部页，不算关闭 App，故不列入。 */
+  var CLOSE_FNS = ['close', 'closeApp', 'xBack', 'hide', 'exit'];
+
+  function apiNamesFor(el) {
+    var id = String((el && el.id) || '');
+    if (!id) return [];
     var camel = id.replace(/-([a-z0-9])/g, function (m, c) { return c.toUpperCase(); });
-    var names = /App$/.test(camel) ? [camel] : [camel, camel + 'App'];
-    for (var i = 0; i < names.length; i++) {
-      var api = global[names[i]];
-      if (api && typeof api.close === 'function') return api;
+    var cap = camel.charAt(0).toUpperCase() + camel.slice(1);
+    var names = [];
+    function push(n) {
+      if (n && names.indexOf(n) < 0) names.push(n);
     }
-    return null;
+    push(APP_API_ALIAS[id]);
+    push(camel);
+    push(camel + 'App');
+    push(cap);
+    push(cap + 'App');
+    return names;
   }
 
-  function clickBackButton(el) {
-    var btns = el.querySelectorAll('[id*="-back"], [data-miya-back]');
-    for (var i = 0; i < btns.length; i++) {
-      var b = btns[i];
-      if (!isVisible(b)) continue;
-      try { b.click(); return true; } catch (e) { /* continue */ }
+  function callCloseApi(el) {
+    var names = apiNamesFor(el);
+    for (var i = 0; i < names.length; i++) {
+      var api = global[names[i]];
+      if (!api) continue;
+      for (var j = 0; j < CLOSE_FNS.length; j++) {
+        var fn = CLOSE_FNS[j];
+        if (typeof api[fn] !== 'function') continue;
+        var ok = safe(function () { api[fn](); return true; }, false);
+        if (ok) return true;
+      }
     }
     return false;
   }
 
+  function looksInteractive(el) {
+    var tag = String(el.tagName || '').toLowerCase();
+    if (tag === 'button' || tag === 'a' || tag === 'input') return true;
+    if (el.getAttribute('role') === 'button') return true;
+    return /back|close/i.test(String(el.className || ''));
+  }
+
+  function clickBackButton(root) {
+    if (!root || !root.querySelectorAll) return false;
+    var btns = root.querySelectorAll(
+      '[data-miya-back], [data-miya-close], [id*="-back"], [id$="-close"], ' +
+      '[aria-label="返回"], [aria-label="关闭"]'
+    );
+    for (var i = 0; i < btns.length; i++) {
+      var b = btns[i];
+      if (!looksInteractive(b) || !isClickable(b)) continue;
+      var ok = safe(function () { b.click(); return true; }, false);
+      if (ok) return true;
+    }
+    return false;
+  }
+
+  /* 当前真正打开着的 App 层（玩法模式层不算，它们由 closeModeLayer 处理）。 */
+  function appLayersOpen() {
+    var out = [];
+    var nodes = doc.querySelectorAll('[id^="miya-"]');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (el.classList.contains('miya-mode-layer')) continue;
+      if (!coversScreen(el) || !isVisible(el)) continue;
+      var open = el.classList.contains('is-open') ||
+                 el.classList.contains('is-active') ||
+                 el.getAttribute('aria-hidden') === 'false';
+      if (!open) continue;
+      out.push(el);
+    }
+    return out;
+  }
+
   function closeTopLayer() {
-    var list = doc.querySelectorAll('[id^="miya-"]');
-    for (var i = list.length - 1; i >= 0; i--) {
-      var el = list[i];
-      if (!isVisible(el)) continue;
-      var r = el.getBoundingClientRect();
-      if (r.height < global.innerHeight * 0.45) continue;
-      var api = findCloseApi(el);
-      if (api) {
-        try { api.close(); return true; } catch (e) { /* fallthrough */ }
-      }
+    var layers = appLayersOpen();
+    for (var i = layers.length - 1; i >= 0; i--) {
+      var el = layers[i];
+      if (callCloseApi(el)) return true;
       if (clickBackButton(el)) return true;
     }
     return false;
   }
 
+  /* 玩法层（模拟器 / 世界）不是普通 App，走模式切换退出：
+   * 播放页 → 先回 hub；hub → 切回小手机层。这样滑动返回不会把整个 APK 退到后台。
+   */
+  function closeModeLayer() {
+    var bodyCls = doc.body.classList;
+    var ms = global.miyaModeSwitch;
+    if (bodyCls.contains('miya-mode-sim')) {
+      var sim = doc.getElementById('miya-simulator-app');
+      if (sim) {
+        var inner = sim.querySelectorAll('.is-open');
+        for (var i = inner.length - 1; i >= 0; i--) {
+          var el = inner[i];
+          if (!isVisible(el)) continue;
+          if (clickBackButton(el)) return true;
+        }
+        var api = global.miyaSimulatorApp;
+        if (sim.classList.contains('is-in-play') && api && typeof api.backToHub === 'function') {
+          safe(function () { api.backToHub(); });
+          if (!sim.classList.contains('is-in-play')) return true;
+        }
+      }
+      if (ms && typeof ms.setMode === 'function') {
+        safe(function () { ms.setMode('phone'); });
+        if (!doc.body.classList.contains('miya-mode-sim')) return true;
+      }
+      return false;
+    }
+    if (bodyCls.contains('miya-mode-world') && ms && typeof ms.setMode === 'function') {
+      safe(function () { ms.setMode('phone'); });
+      if (!doc.body.classList.contains('miya-mode-world')) return true;
+    }
+    return false;
+  }
+
+  /* 兜底：确实在 App 里、但所有关闭 API 都没生效时，直接把 App 层收回桌面。
+   * 宁可回到桌面（再点图标即可重进），也不要滑动返回一下就整个退到后台 ——
+   * 后者在手机上看起来就是"App 被关掉了"。
+   */
+  function forceBackToDesk() {
+    if (!doc.body.classList.contains('miya-app-open')) return false;
+    var layers = appLayersOpen();
+    for (var i = 0; i < layers.length; i++) {
+      layers[i].classList.remove('is-open', 'is-active');
+      layers[i].setAttribute('aria-hidden', 'true');
+    }
+    doc.body.classList.remove('miya-app-open');
+    return true;
+  }
+
   global.__miyaHandleBack = function () {
     if (closeDialog()) return true;
-    if (closeSlidePanel()) return true;
     if (closeChatRoom()) return true;
-    return closeTopLayer();
+    if (closeTopLayer()) return true;
+    if (closeModeLayer()) return true;
+    if (closeSlidePanel()) return true;
+    return forceBackToDesk();
   };
 
   /* ============================ 通知深链 ============================ */

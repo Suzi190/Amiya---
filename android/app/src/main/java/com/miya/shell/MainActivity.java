@@ -28,9 +28,9 @@ import android.widget.Toast;
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsAnimationCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.webkit.WebViewAssetLoader;
@@ -39,6 +39,7 @@ import org.json.JSONObject;
 
 import java.io.InputStream;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -99,12 +100,8 @@ public class MainActivity extends AppCompatActivity {
         bridge = new MiyaBridge(this, webView);
         webView.addJavascriptInterface(bridge, MiyaBridge.NAME);
 
-        // 键盘 / 系统栏 insets：IME 高度直接压缩 WebView 可视高度
-        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
-            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
-            applyImeInset(ime.bottom);
-            return insets;
-        });
+        // 键盘：IME 高度逐帧压缩 WebView 可视高度（跟随系统键盘动画，不硬跳变）
+        setupImeHandling();
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -162,19 +159,83 @@ public class MainActivity extends AppCompatActivity {
 
     /* ---------------- 键盘 ---------------- */
 
-    private void applyImeInset(int bottomPx) {
+    /**
+     * API 30+ 用 WindowInsetsAnimationCompat 跟随系统键盘动画逐帧压缩 WebView，
+     * 而不是等动画结束再一次性跳变（后者就是"键盘弹出时画面一顿"的来源）。
+     * 旧的 insets 监听保留：动画开始/结束的最终值仍以它为准。
+     */
+    private void setupImeHandling() {
+        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            int ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
+            applyImeLayout(ime);
+            scheduleKeyboardNotify();
+            return insets;
+        });
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            ViewCompat.setWindowInsetsAnimationCallback(root,
+                    new WindowInsetsAnimationCompat.Callback(
+                            WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                        @Override
+                        public WindowInsetsCompat onProgress(WindowInsetsCompat insets,
+                                                             List<WindowInsetsAnimationCompat> running) {
+                            for (int i = 0; i < running.size(); i++) {
+                                if ((running.get(i).getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) {
+                                    applyImeLayout(insets.getInsets(WindowInsetsCompat.Type.ime()).bottom);
+                                    break;
+                                }
+                            }
+                            return insets;
+                        }
+
+                        @Override
+                        public void onEnd(WindowInsetsAnimationCompat animation) {
+                            if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) == 0) return;
+                            scheduleKeyboardNotify();
+                        }
+                    });
+        }
+    }
+
+    /** 只改布局，不回调网页：动画期间每帧都会走这里，回调网页会排队卡顿。 */
+    private void applyImeLayout(int bottomPx) {
         // 旧系统由窗口 resize 处理（adjustResize），这里不重复补偿
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return;
+        if (webView == null) return;
         int px = Math.max(0, bottomPx);
         if (px == imeBottomPx) return;
         imeBottomPx = px;
         ViewGroup.LayoutParams lp = webView.getLayoutParams();
         if (lp instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
-            mlp.bottomMargin = px;
-            webView.setLayoutParams(mlp);
+            ((ViewGroup.MarginLayoutParams) lp).bottomMargin = px;
+            webView.setLayoutParams(lp);
         }
-        if (bridge != null) bridge.onKeyboardHeightChanged(px);
+    }
+
+    /** 键盘高度稳定后再通知网页（合并连续变化，避免 evaluateJavascript 排队）。 */
+    private void scheduleKeyboardNotify() {
+        if (webView == null) return;
+        webView.removeCallbacks(imeNotifyTask);
+        webView.postDelayed(imeNotifyTask, 110);
+    }
+
+    private final Runnable imeNotifyTask = new Runnable() {
+        @Override
+        public void run() {
+            if (webView == null) return;
+            if (bridge != null) bridge.onKeyboardHeightChanged(imeBottomPx);
+            if (imeBottomPx > 0) revealFocusedInput();
+        }
+    };
+
+    /** 可视区被键盘压缩后，把正在输入的框滚回可见处；已在视野内则不动（nearest）。 */
+    private void revealFocusedInput() {
+        if (webView == null) return;
+        webView.evaluateJavascript(
+                "(function(){try{var a=document.activeElement;"
+                        + "if(a&&a!==document.body&&a.scrollIntoView){"
+                        + "a.scrollIntoView({block:'nearest',inline:'nearest'});}}catch(e){}})();",
+                null);
     }
 
     /* ---------------- WebView ---------------- */
