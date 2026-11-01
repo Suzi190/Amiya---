@@ -146,6 +146,7 @@
   function clearKeyboardState() {
     clearIosRoomKeyboardLayout();
     syncChatAppKeyboardShell(false);
+    lastKbInset = -1; // 下次 open 必须重算一次
   }
 
   function syncAppHeight(force) {
@@ -496,6 +497,19 @@
     }, 280);
   }
 
+  var lastKbInset = -1;
+  var kbScrollTimer = 0;
+
+  /* 键盘压缩过程中别每帧都"滚到底"：高度在动画里持续变化，
+   * 每帧强制对齐底部会让输入区上下抖。等高度稳定再滚一次。 */
+  function scheduleScrollRoomBottom() {
+    if (kbScrollTimer) clearTimeout(kbScrollTimer);
+    kbScrollTimer = setTimeout(function () {
+      kbScrollTimer = 0;
+      scrollRoomToBottom($('qq-room-scroll'), true);
+    }, 150);
+  }
+
   function syncKeyboardInset() {
     if (!roomEl) return;
     var vv = window.visualViewport;
@@ -503,12 +517,19 @@
     if (vv) {
       inset = Math.max(0, Math.round(window.innerHeight - vv.height - (vv.offsetTop || 0)));
     }
-    roomEl.style.setProperty('--qq-kb-offset', inset + 'px');
 
     if (isIOSChat()) {
+      roomEl.style.setProperty('--qq-kb-offset', inset + 'px');
       syncIosKeyboardInset(vv, inset);
       return;
     }
+
+    /* 安卓：WebView 高度由原生壳跟随键盘压缩，inset 本来就≈0。
+     * 值没变还重复走一遍 → 类反复切换 + 反复滚到底 → 输入框小幅上下跳。 */
+    if (inset === lastKbInset) return;
+    lastKbInset = inset;
+
+    roomEl.style.setProperty('--qq-kb-offset', inset + 'px');
 
     var open = inset > 40;
     roomEl.classList.toggle('qq-room--keyboard', open);
@@ -517,7 +538,7 @@
       roomEl.style.setProperty('--qq-kb-height', Math.round(vv.height) + 'px');
       syncChatAppKeyboardShell(true, vv);
       if ((vv.offsetTop || 0) > 0) window.scrollTo(0, 0);
-      scrollRoomToBottom($('qq-room-scroll'), true);
+      scheduleScrollRoomBottom();
     } else {
       roomEl.style.removeProperty('--qq-kb-top');
       roomEl.style.removeProperty('--qq-kb-height');

@@ -3447,6 +3447,17 @@
   global.miyaSettingsApp = {
     open: openSettingsApp,
     close: closeSettingsApp,
+    /* 安卓返回键/侧滑用：还开着二级页面就先回列表页，否则关闭整个设置 */
+    back: function () {
+      var app = $('miya-settings-app');
+      if (!app || !app.classList.contains('is-open')) return false;
+      if (app.classList.contains('has-panel')) {
+        showMainList();
+        return true;
+      }
+      closeSettingsApp();
+      return true;
+    },
     toast: toast,
     refreshApiFab: refreshApiFabLists,
     syncApiFab: syncApiFabVisibility,

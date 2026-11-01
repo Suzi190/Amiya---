@@ -191,6 +191,11 @@ public class MainActivity extends AppCompatActivity {
                         @Override
                         public void onEnd(WindowInsetsAnimationCompat animation) {
                             if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) == 0) return;
+                            // 按最终 insets 收口，避免最后一帧没对齐、键盘上方露一条缝
+                            WindowInsetsCompat rootInsets = ViewCompat.getRootWindowInsets(root);
+                            if (rootInsets != null) {
+                                applyImeLayout(rootInsets.getInsets(WindowInsetsCompat.Type.ime()).bottom);
+                            }
                             scheduleKeyboardNotify();
                         }
                     });
@@ -228,15 +233,21 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    /** 可视区被键盘压缩后，把正在输入的框滚回可见处；已在视野内则不动（nearest）。 */
+    /** 可视区被键盘压缩后，只有焦点框真的被挤出/遮住时才滚一下（nearest）。
+     *  之前无条件 scrollIntoView，每次弹键盘都会额外滚一次 —— 那就是输入框上下抖动的来源。
+     */
     private void revealFocusedInput() {
         if (webView == null) return;
         webView.evaluateJavascript(
                 "(function(){try{var a=document.activeElement;"
-                        + "if(a&&a!==document.body&&a.scrollIntoView){"
-                        + "a.scrollIntoView({block:'nearest',inline:'nearest'});}}catch(e){}})();",
+                        + "if(!a||a===document.body||!a.scrollIntoView)return;"
+                        + "var r=a.getBoundingClientRect();var bot=window.innerHeight||0;"
+                        + "if(r.bottom<=bot&&r.top>=0)return;" // 完整可见就不动，避免多滚一次造成抖动
+                        + "a.scrollIntoView({block:'nearest',inline:'nearest'});"
+                        + "}catch(e){}})();",
                 null);
     }
+
 
     /* ---------------- WebView ---------------- */
 

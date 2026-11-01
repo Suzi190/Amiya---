@@ -182,7 +182,10 @@
       var vv = window.visualViewport;
       var vvH = vv ? vv.height : 0;
       var vvTop = vv ? (vv.offsetTop || 0) : 0;
-      finalH = Math.max(innerH, clientH, vvH + vvTop);
+      /* 键盘压缩过程中这三个值并不同步（visualViewport 常晚一帧），
+       * 取 max 会让 --app-height 在两个值之间来回摆 —— 手机上就是输入框上下小幅跳动。
+       * Android WebView 里 innerHeight 就是真实可视高度，直接用它。 */
+      finalH = innerH > 0 ? innerH : Math.max(clientH, vvH + vvTop);
       var rH = finalH;
       if (isMobile && lastAppHeight > 0 && Math.abs(rH - lastAppHeight) < 2) return;
       lastAppHeight = rH;

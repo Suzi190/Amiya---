@@ -97,18 +97,28 @@ gradle :app:assembleDebug
 - **通知收不到**：设置里打开「系统通知」，并确认系统「应用通知」已允许；省电模式/后台限制可能延迟定时提醒。
 - **导出的文件找不到**：文件管理器 → 下载 → `Miya`；Android 10+ 也可在「文件 → 下载」看到。
 - **返回直接退出**：当前已在桌面层时按返回会「退到后台」（符合不退出预期）；若希望彻底退出，用系统任务列表划掉。
-- **设置 / 模拟器里左右滑动返回，不像"退上一页"而是 App 直接没了**：v1.0.3 起返回按四层收口
-  （对话框 → 聊天房间 → 当前 App 层 → 玩法层）。旧实现只用 `getBoundingClientRect()` 判断"可见"，
-  但非活跃玩法层（`.miya-mode-layer:not(.is-active)`）只是被 `content-visibility:hidden` 跳过绘制，
-  尺寸依旧是全屏 —— 隐藏的模拟器层被当成打开着的 App，于是要么误点它内部的返回按钮把这次返回"吞掉"，
-  要么谁都关不掉、一路落到 `moveTaskToBack()`（看起来就是退出 APK）。现在判定补了
-  `content-visibility` / `opacity` / 祖先玩法层检查，并按 id 显式映射导出名不一致的 App
-  （`miya-offline-app → miyaOfflineApp`、`miya-fun-sayguess-app → miyaFunSayGuessApp`）；
-  模拟器按「播放页 → hub → 切回小手机层」退出，真关不掉时兜底回桌面，而不是退到后台。
-- **键盘弹出 / 收起时画面顿一下**：原实现等键盘动画结束才一次性改 WebView 高度（硬跳变）。
-  v1.0.3 起用 `WindowInsetsAnimationCompat` 逐帧跟随系统键盘动画压缩 WebView；键盘高度稳定
-  110 ms 后才通知网页（合并连续 `evaluateJavascript`），并把正在输入的框
-  `scrollIntoView({block:'nearest'})` 滚回可见区。
+- **设置 / 模拟器里左右滑动返回，不像"退上一页"而是 App 直接没了**：v1.0.4 起返回真正按层收口
+  （对话框 → 聊天房间 → 当前 App 层 → 抽屉面板 → 玩法层 → 兜底回桌面）。踩过的三个坑：
+  1. 旧实现只用 `getBoundingClientRect()` 判断"可见"，但非活跃玩法层（`.miya-mode-layer:not(.is-active)`）
+     只是被 `content-visibility:hidden` 跳过绘制，尺寸依旧是全屏 —— 隐藏的模拟器层被当成打开着的 App，
+     返回时误点它内部的按钮把这次返回"吞掉"，或者谁都关不掉、一路落到 `moveTaskToBack()`（看起来就是退出 APK）。
+     现在补了 `content-visibility` / `opacity` / `aria-hidden` / 祖先玩法层检查。
+  2. 旧实现扫描 `[id^="miya-"]`，把设置里上百个 `miya-st-*` 子元素也逐个量尺寸，每次返回触发上百次
+     强制重排；现在只扫 `[id$="-app"]` / `[id$="-overlay"]` / `[data-miya-app]`，且先用 class 判断是否打开。
+  3. `miyaSlidePanel.close()` 会把元素 `hidden=true`，而各 App 的 `open()` 只加类、不会取消 `hidden`
+     —— 设置 App 被它关一次就再也打不开了。现在抽屉关闭明确排除 App 容器和桌面/玩法层。
+  关闭顺序改为「`back()` → `close()`/`closeApp()`/… → App 自己的返回按钮 → 硬收层」，
+  设置新增 `miyaSettingsApp.back()`（还开着二级页面就先回列表页，否则关闭整个设置），
+  最后兜底 `forceBackToDesk()` 不再依赖 `body.miya-app-open`，只要有打开着的层就一定收掉，绝不退后台。
+- **键盘弹出 / 收起时画面顿一下、输入框小幅上下跳**：v1.0.3 起用 `WindowInsetsAnimationCompat`
+  逐帧跟随系统键盘动画压缩 WebView，键盘高度稳定 110 ms 后才通知网页。v1.0.4 再修三处抖动源：
+  1. `index.html` 的 `--app-height` 原本取 `Math.max(innerHeight, clientHeight, vv.height + vv.offsetTop)`，
+     键盘压缩过程中三者并不同步（visualViewport 常晚一帧），页面高度就在两个值之间来回摆；
+     安卓壳里直接用 `innerHeight`。
+  2. 聊天室 `syncKeyboardInset()` 原来每帧都会切类、`scrollRoomToBottom()` 滚到底，
+     现在按 inset 值去重，滚动改成 150 ms 防抖，只在键盘高度稳定后对齐一次。
+  3. 原生侧的 `revealFocusedInput()` 原来无条件 `scrollIntoView`，即使输入框已在视野内也会再滚一次；
+     现在只在焦点框真的被挤出可视区时才滚。
 - **页面空白**：先确认 `mingruis-miya-main/index.html` 存在；CI 里由 *Stage web assets* 步骤复制。
 - **侧滑返回时整屏一片“磨砂玻璃”**：网页原本会在 `body.miya-app-open` 时给桌面 `.phone`
   加 `filter: blur(10px)`（App 打开时当作虚化背景）。APK 里 App 层是全屏不透明的，这层虚化本来

@@ -290,6 +290,13 @@
     var nodes = doc.querySelectorAll('.is-open[aria-hidden="false"]');
     for (var i = nodes.length - 1; i >= 0; i--) {
       var el = nodes[i];
+      /* App 容器绝不能交给 miyaSlidePanel.close：它会把元素 hidden=true，
+       * 而这些 App 的 open() 只加类、不会取消 hidden，之后就再也打不开了。 */
+      if (/(^|-)app$/.test(String(el.id || '')) || el.hasAttribute('data-miya-app')) continue;
+      if (el.closest && el.closest('[id$="-app"]')) continue;
+      // 桌面/玩法层也绝不能交给它，否则整个小手机层会被 hidden 掉
+      if (el.classList.contains('miya-mode-layer')) continue;
+      if (el.classList.contains('phone')) continue;
       if (!isVisible(el)) continue;
       var r = el.getBoundingClientRect();
       if (r.height < global.innerHeight * 0.3) continue;
@@ -316,8 +323,9 @@
     'miya-fun-sayguess-app': 'miyaFunSayGuessApp'
   };
 
-  /* 依次尝试的关闭方法；backToHub / closeToHome 只回内部页，不算关闭 App，故不列入。 */
-  var CLOSE_FNS = ['close', 'closeApp', 'xBack', 'hide', 'exit'];
+  /* 依次尝试的关闭方法。back 只回上一级（如设置里的二级页面），排在最前；
+   * backToHub / closeToHome 属于玩法层内部跳转，不算关闭 App，故不列入。 */
+  var CLOSE_FNS = ['back', 'close', 'closeApp', 'xBack', 'hide', 'exit'];
 
   function apiNamesFor(el) {
     var id = String((el && el.id) || '');
@@ -344,7 +352,8 @@
       for (var j = 0; j < CLOSE_FNS.length; j++) {
         var fn = CLOSE_FNS[j];
         if (typeof api[fn] !== 'function') continue;
-        var ok = safe(function () { api[fn](); return true; }, false);
+        // 返回 false 表示"没有可退的上一级"（如设置已在列表页），继续试下一个方法
+        var ok = safe(function () { return api[fn]() !== false; }, false);
         if (ok) return true;
       }
     }
@@ -360,8 +369,9 @@
 
   function clickBackButton(root) {
     if (!root || !root.querySelectorAll) return false;
+    // 精确到"以 -back / -close 结尾"或"-back-" 段：避免命中 miya-st-backup-* 这类同前缀元素
     var btns = root.querySelectorAll(
-      '[data-miya-back], [data-miya-close], [id*="-back"], [id$="-close"], ' +
+      '[data-miya-back], [data-miya-close], [id$="-back"], [id*="-back-"], [id$="-close"], ' +
       '[aria-label="返回"], [aria-label="关闭"]'
     );
     for (var i = 0; i < btns.length; i++) {
@@ -373,29 +383,53 @@
     return false;
   }
 
+  /* 只扫真正的 App 容器。旧写法 `[id^="miya-"]` 会把设置里成百上千个 miya-st-*
+   * 子元素也拿去量尺寸，每次返回都触发上百次强制重排 —— 低端机上就是"滑了没反应"。
+   */
+  var APP_LAYER_SELECTOR = '[id$="-app"], [id$="-overlay"], [data-miya-app]';
+
+  function markedOpen(el) {
+    if (el.hidden) return false;
+    if (el.classList.contains('is-open') || el.classList.contains('is-active')) return true;
+    return el.getAttribute('aria-hidden') === 'false';
+  }
+
   /* 当前真正打开着的 App 层（玩法模式层不算，它们由 closeModeLayer 处理）。 */
   function appLayersOpen() {
     var out = [];
-    var nodes = doc.querySelectorAll('[id^="miya-"]');
+    var nodes = doc.querySelectorAll(APP_LAYER_SELECTOR);
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
       if (el.classList.contains('miya-mode-layer')) continue;
+      // 玩法层交给 closeModeLayer 走模式切换，别当成普通 App 关掉
+      if (el.id === 'miya-simulator-app' || el.id === 'miya-world-app') continue;
+      if (!markedOpen(el)) continue; // 便宜判断在前，避免无谓的布局测量
       if (!coversScreen(el) || !isVisible(el)) continue;
-      var open = el.classList.contains('is-open') ||
-                 el.classList.contains('is-active') ||
-                 el.getAttribute('aria-hidden') === 'false';
-      if (!open) continue;
       out.push(el);
     }
     return out;
+  }
+
+  /* 兜底关闭：只摘类和 aria-hidden，绝不设 hidden。
+   * miyaSlidePanel.close() 会把元素 hidden=true，而这些 App 的 open() 只加类、
+   * 不会去取消 hidden —— 一旦被它关过，设置 App 就再也打不开了。
+   */
+  function hardCloseLayer(el) {
+    el.classList.remove('is-open', 'is-active');
+    el.setAttribute('aria-hidden', 'true');
+    return true;
   }
 
   function closeTopLayer() {
     var layers = appLayersOpen();
     for (var i = layers.length - 1; i >= 0; i--) {
       var el = layers[i];
+      // back()/close() 最可靠；退不到就点 App 自己的返回按钮；再不行硬收层
       if (callCloseApi(el)) return true;
       if (clickBackButton(el)) return true;
+      hardCloseLayer(el);
+      if (!appLayersOpen().length) doc.body.classList.remove('miya-app-open');
+      return true;
     }
     return false;
   }
@@ -459,28 +493,40 @@
     return true;
   }
 
-  /* 兜底：确实在 App 里、但所有关闭 API 都没生效时，直接把 App 层收回桌面。
-   * 宁可回到桌面（再点图标即可重进），也不要滑动返回一下就整个退到后台 ——
-   * 后者在手机上看起来就是"App 被关掉了"。
+  /* 兜底：真正在 App 里、但所有关闭手段都没生效时，把打开着的层全部收回桌面。
+   * 不能再依赖 body.miya-app-open（某些 App 关闭时会误删这个类，设置还开着就没了），
+   * 否则返回会一路落到 moveTaskToBack —— 在手机上看起来就是"App 被关掉了"。
    */
   function forceBackToDesk() {
-    if (!doc.body.classList.contains('miya-app-open')) return false;
     var layers = appLayersOpen();
-    for (var i = 0; i < layers.length; i++) {
-      layers[i].classList.remove('is-open', 'is-active');
-      layers[i].setAttribute('aria-hidden', 'true');
-    }
+    if (!layers.length) return false;
+    for (var i = 0; i < layers.length; i++) hardCloseLayer(layers[i]);
     doc.body.classList.remove('miya-app-open');
     return true;
   }
 
+  function backDone(step) {
+    // 留一行调试输出：真机连 chrome://inspect 就能看到是哪一个分支收的尾
+    safe(function () {
+      if (global.console && global.console.debug) global.console.debug('[miya-back] ' + step);
+    });
+    return true;
+  }
+
   global.__miyaHandleBack = function () {
-    if (closeDialog()) return true;
-    if (closeChatRoom()) return true;
-    if (closeTopLayer()) return true;
-    if (closeSlidePanel()) return true;
-    if (closeModeLayer()) return true;
-    return forceBackToDesk();
+    if (closeDialog()) return backDone('dialog');
+    if (closeChatRoom()) return backDone('chat-room');
+    if (closeTopLayer()) return backDone('app-layer');
+    if (closeSlidePanel()) return backDone('slide-panel');
+    if (closeModeLayer()) return backDone('mode-layer');
+    if (forceBackToDesk()) return backDone('force-desk');
+    /* 状态不一致（body 上还挂着 miya-app-open，但没有可识别的大层）：
+     * 清掉标记，宁可"这次不 Back 到桌面"，也不要一滑就退到后台。 */
+    if (doc.body.classList.contains('miya-app-open')) {
+      doc.body.classList.remove('miya-app-open');
+      return backDone('clear-app-open');
+    }
+    return false;
   };
 
   /* ============================ 通知深链 ============================ */
