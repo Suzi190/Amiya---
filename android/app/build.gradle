@@ -37,7 +37,17 @@ android {
 }
 
 dependencies {
+    // 对齐 Kotlin 运行时版本，避免 androidx 传递的 kotlin-stdlib 与旧版
+    // kotlin-stdlib-jdk7 / jdk8 产生 "Duplicate class" 打包失败
+    implementation platform('org.jetbrains.kotlin:kotlin-bom:1.8.22')
+
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.core:core:1.13.1'
     implementation 'androidx.webkit:webkit:1.11.0'
+}
+
+configurations.configureEach {
+    // Kotlin 1.8 起 jdk7/jdk8 的内容已合并进 kotlin-stdlib
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
 }
