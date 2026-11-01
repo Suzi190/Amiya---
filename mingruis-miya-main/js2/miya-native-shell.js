@@ -406,7 +406,11 @@
   function closeModeLayer() {
     var bodyCls = doc.body.classList;
     var ms = global.miyaModeSwitch;
-    if (bodyCls.contains('miya-mode-sim')) {
+    var simMode = bodyCls.contains('miya-mode-sim');
+    var worldMode = bodyCls.contains('miya-mode-world');
+    if (!simMode && !worldMode) return false;
+
+    if (simMode) {
       var sim = doc.getElementById('miya-simulator-app');
       if (sim) {
         var inner = sim.querySelectorAll('.is-open');
@@ -418,20 +422,41 @@
         var api = global.miyaSimulatorApp;
         if (sim.classList.contains('is-in-play') && api && typeof api.backToHub === 'function') {
           safe(function () { api.backToHub(); });
-          if (!sim.classList.contains('is-in-play')) return true;
+          return true;
         }
       }
-      if (ms && typeof ms.setMode === 'function') {
-        safe(function () { ms.setMode('phone'); });
-        if (!doc.body.classList.contains('miya-mode-sim')) return true;
+    }
+
+    /* setMode 走 Promise 过渡，body 上的模式类要到微任务里才改，
+     * 所以这里不能同步校验结果 —— 调用即视为已处理，避免落到"退后台"。 */
+    if (ms && typeof ms.setMode === 'function') {
+      var called = safe(function () { ms.setMode('phone'); return true; }, false);
+      if (called) return true;
+    }
+
+    /* 连模式切换 API 都没有时，直接把玩法层切回小手机层 */
+    if (simMode) {
+      bodyCls.remove('miya-mode-sim');
+      var sim2 = doc.getElementById('miya-simulator-app');
+      if (sim2) {
+        sim2.classList.remove('is-active');
+        sim2.classList.add('is-leaving');
       }
-      return false;
+    } else {
+      bodyCls.remove('miya-mode-world');
+      var world = doc.getElementById('miya-world-app');
+      if (world) {
+        world.classList.remove('is-active');
+        world.classList.add('is-leaving');
+      }
     }
-    if (bodyCls.contains('miya-mode-world') && ms && typeof ms.setMode === 'function') {
-      safe(function () { ms.setMode('phone'); });
-      if (!doc.body.classList.contains('miya-mode-world')) return true;
+    bodyCls.add('miya-mode-phone');
+    var phone = doc.getElementById('miya-phone-layer') || doc.querySelector('.phone');
+    if (phone) {
+      phone.classList.remove('is-leaving');
+      phone.classList.add('is-active');
     }
-    return false;
+    return true;
   }
 
   /* 兜底：确实在 App 里、但所有关闭 API 都没生效时，直接把 App 层收回桌面。
@@ -453,8 +478,8 @@
     if (closeDialog()) return true;
     if (closeChatRoom()) return true;
     if (closeTopLayer()) return true;
-    if (closeModeLayer()) return true;
     if (closeSlidePanel()) return true;
+    if (closeModeLayer()) return true;
     return forceBackToDesk();
   };
 
