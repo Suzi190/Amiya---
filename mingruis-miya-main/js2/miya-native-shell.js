@@ -15,6 +15,24 @@
     try { return fn(); } catch (e) { return fallback; }
   }
 
+  /* ============================ 视觉补丁 ============================ */
+
+  /* 网页打开 App 时会给桌面 .phone 加 `transform: scale(0.96)` + `filter: blur(10px)`
+   * （miya-apps.css 的 body.miya-app-open 规则），App 层关闭时又有 0.38s 淡出，
+   * 于是返回的瞬间会露出一大片"磨砂玻璃"。APK 里 App 层本来就是全屏不透明的，
+   * 这层虚化完全看不到，所以直接在原生壳里关掉：返回时看到的是干净的桌面。
+   */
+  safe(function () {
+    var style = doc.createElement('style');
+    style.id = 'miya-native-shell-style';
+    style.appendChild(doc.createTextNode(
+      'html.miya-native-shell body.miya-app-open .phone{' +
+      'transform:none !important;filter:none !important;transition:none !important;' +
+      '}'
+    ));
+    (doc.head || doc.documentElement).appendChild(style);
+  });
+
   /* ============================ 通知 ============================ */
 
   function extractChatId(opts) {
