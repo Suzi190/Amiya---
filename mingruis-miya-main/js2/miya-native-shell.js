@@ -245,7 +245,7 @@
    * 2. 抽屉 / 面板常驻 DOM，靠 opacity:0 隐藏，也必须排除。
    */
   function isVisible(el) {
-    if (!el || !el.isConnected || el.hidden) return false;
+    if (!el || !el.isConnected) return false;
     if (el.getAttribute && el.getAttribute('aria-hidden') === 'true' &&
         !el.classList.contains('is-active')) return false;
     if (el.closest && el.closest('.miya-mode-layer:not(.is-active):not(.is-leaving)')) return false;
