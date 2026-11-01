@@ -99,3 +99,20 @@ gradle :app:assembleDebug
 - **想改应用名/包名**：改 `android/app/build.gradle` 的 `applicationId`、`res/values/strings.xml` 的 `app_name`
   （改 `applicationId` 会被视为新应用，数据不继承）。
 - **想换成正式签名**：在 CI 中注入 keystore 并配置 `signingConfigs`，把 `assembleDebug` 换成 `assembleRelease`。
+
+## 七、已验证 & 调试
+
+每次构建都会自动检查（失败会直接红叉）：
+
+- Gradle 8.7 + AGP 8.5.2 + JDK 17 + compileSdk 34 编译通过，产出 `app-debug.apk`；
+- APK 内确实包含 `assets/public/index.html`、`assets/public/js2/miya-native-shell.js`、`assets/public/css/style.css`
+  （整站约 300 个文件，全部打进 `assets/public/`）；
+- 上传 Actions 产物，并覆盖发布到 `apk-latest` Release（含固定签名）。
+
+真机排查问题：
+
+- APK 是 debug 包，已开启 WebView 远程调试：手机连电脑 → 电脑 Chrome 打开 `chrome://inspect`，
+  可以看到页面控制台日志、DOM、网络请求（排查 API 地址、存储、通知都很方便）。
+- 若页面白屏，先在 `chrome://inspect` 看 `https://localhost/index.html` 是否加载成功、
+  Console 有无 JS 报错；再确认 APK 是否最新版本（Release 更新时间为准）。
+
