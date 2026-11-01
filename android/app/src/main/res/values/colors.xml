@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 与网页纸张底色一致，避免启动白屏/黑屏 -->
+    <color name="miya_bg">#F4F1EC</color>
+    <color name="miya_transparent">#00000000</color>
+</resources>

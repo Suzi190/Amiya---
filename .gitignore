@@ -1,0 +1,12 @@
+# 构建产物
+android/app/build/
+android/.gradle/
+android/app/src/main/assets/public/
+*.apk
+*.aab
+
+# 编辑器
+.idea/
+.vscode/
+*.iml
+.DS_Store

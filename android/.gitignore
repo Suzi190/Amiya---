@@ -1,0 +1,11 @@
+.gradle/
+local.properties
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.iml
+.idea/
+
+# 由构建脚本从 ../mingruis-miya-main 复制进来，不入库
+app/src/main/assets/public/
